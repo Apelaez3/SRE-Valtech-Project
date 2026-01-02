@@ -1,8 +1,7 @@
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from app.db.schema import User  # si ya migraste a db/models/user.py, ajusta este import
-
+from app.db.models.user import User
 
 class UserService:
     def __init__(self, db: Session):
@@ -13,7 +12,7 @@ class UserService:
             username=username,
             email=email,
             full_name=full_name,
-            hashed_password=hashed_password,
+            hashed_password=hashed_password
         )
         self.db.add(new_user)
         self.db.commit()
@@ -25,6 +24,7 @@ class UserService:
 
     def get_user_by_email(self, email: str) -> Optional[User]:
         return self.db.query(User).filter(User.email == email).first()
+
 
 
     

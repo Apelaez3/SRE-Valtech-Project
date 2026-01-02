@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 
-from app.db.schema import SessionLocal, User
+from app.db.session import SessionLocal
+from app.schemas.user import UserCreate, UserRead
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -15,51 +16,30 @@ def get_db():
         db.close()
 
 
-@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
-def create_user(payload: dict, db: Session = Depends(get_db)):
-    # ⚠️ Para arrancar rápido uso dict; luego lo cambiamos a Pydantic schema
-    required = ["username", "email", "full_name", "hashed_password"]
-    missing = [k for k in required if k not in payload]
-    if missing:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Missing fields: {', '.join(missing)}",
-        )
+def get_user_service(db: Session = Depends(get_db)) -> UserService:
+    return UserService(db=db)
 
-    service = UserService(db)
 
-    if service.get_user_by_username(payload["username"]):
-        raise HTTPException(status_code=409, detail="Username already exists")
+@router.post("/", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_user(user: UserCreate, user_service: UserService = Depends(get_user_service)):
+    if user_service.get_user_by_email(email=user.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
 
-    if service.get_user_by_email(payload["email"]):
-        raise HTTPException(status_code=409, detail="Email already exists")
+    if user_service.get_user_by_username(username=user.username):
+        raise HTTPException(status_code=400, detail="Username already registered")
 
-    user = service.create_user(
-        username=payload["username"],
-        email=payload["email"],
-        full_name=payload["full_name"],
-        hashed_password=payload["hashed_password"],
+    created = user_service.create_user(
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        hashed_password=user.hashed_password,
     )
-
-    # No devolver hashed_password
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "full_name": user.full_name,
-    }
+    return created
 
 
-@router.get("/{username}", response_model=dict)
-def get_user(username: str, db: Session = Depends(get_db)):
-    service = UserService(db)
-    user = service.get_user_by_username(username)
+@router.get("/{username}", response_model=UserRead)
+def get_user(username: str, user_service: UserService = Depends(get_user_service)):
+    user = user_service.get_user_by_username(username=username)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-
-    return {
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "full_name": user.full_name,
-    }
+    return user
